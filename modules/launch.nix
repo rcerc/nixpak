@@ -124,7 +124,7 @@ let
     cd ${app}
     grep -Rl ${app}/${config.app.binPath} | xargs -r -I {} cp -r --parents --no-preserve=mode {} $out || true
     find $out -type f | while read line; do
-      substituteInPlace $line --replace ${app}/${config.app.binPath} ${config.script}/${config.app.binPath}
+      substituteInPlace $line --replace ${app}/${config.app.binPath} ${config.script}/${config.app.binPath} || : # Survive attempt to substitute in binary file
     done
     find . -type l | while read line; do
       linkTarget="$(readlink $line)"
