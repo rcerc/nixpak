@@ -5,11 +5,14 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
+        "io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
+
+        "github.com/justincormack/go-memfd"
 )
 
 type JsonRaw = map[string]interface{}
@@ -65,11 +68,15 @@ type InstanceId struct {
 	Id   string
 }
 
-func NewInstanceId(raw JsonRaw) (i InstanceId) {
-	i.Type = "instanceId"
+func FindInstanceId() string {
 	var sum = md5.Sum([]byte(strconv.Itoa(os.Getpid())))
 	var enc = base32.NewEncoding("0123456789abcdfghijklmnpqrsvwxyz").WithPadding(base32.NoPadding)
-	i.Id = enc.EncodeToString(sum[:])
+	return enc.EncodeToString(sum[:])
+}
+
+func NewInstanceId(raw JsonRaw) (i InstanceId) {
+	i.Type = "instanceId"
+	i.Id = FindInstanceId()
 	return
 }
 
@@ -146,6 +153,12 @@ func main() {
 	if !foundBwrapArgs {
 		panic("No bubblewrap args given")
 	}
+
+	xdgRuntimeDir, foundXdgRuntimeDir := os.LookupEnv("XDG_RUNTIME_DIR")
+	if !foundXdgRuntimeDir {
+		panic("No XDG_RUNTIME_DIR set")
+	}
+
 	dbusproxyArgsJson, useDbusProxy := os.LookupEnv("XDG_DBUS_PROXY_ARGS")
 
 	appExe, foundAppExe := os.LookupEnv("NIXPAK_APP_EXE")
@@ -168,6 +181,50 @@ func main() {
 	if useDbusProxy {
 		bwrapArgs = append([]string{"--sync-fd", strconv.Itoa(int(r.Fd()))}, bwrapArgs...)
 	}
+
+        flatpakInfoPath, foundFlatpakInfo := os.LookupEnv("FLATPAK_INFO")
+        if !foundFlatpakInfo {
+                panic("No Flatpak info given")
+        }
+
+        flatpakInfo, err := os.Open(flatpakInfoPath)
+        if err != nil {
+                panic(err)
+        }
+
+        flatpakInfoPatched, err := memfd.Create()
+        if err != nil {
+                panic(err)
+        }
+
+        io.Copy(flatpakInfoPatched, flatpakInfo)
+
+        instanceId := FindInstanceId()
+        if _, err := flatpakInfoPatched.WriteString("[Instance]\ninstance-id=" + instanceId + "\n"); err != nil {
+                panic(err)
+        }
+
+        _, err = flatpakInfoPatched.Seek(0, io.SeekStart)
+        if err != nil {
+                panic(err)
+        }
+
+        err = flatpakInfoPatched.SetImmutable()
+        if err != nil {
+                panic(err)
+        }
+
+        if err := os.MkdirAll(xdgRuntimeDir + "/.flatpak/" + instanceId, 0700); err != nil {
+                panic(err)
+        }
+
+        bwrapInfo, err := os.OpenFile(xdgRuntimeDir + "/.flatpak/" + instanceId + "/bwrapinfo.json", os.O_CREATE | os.O_RDWR | os.O_TRUNC, 0644)
+        if err != nil {
+                panic(err)
+        }
+
+        bwrapArgs = append(bwrapArgs, "--ro-bind-data", strconv.Itoa(int(flatpakInfoPatched.Fd())), "/.flatpak-info")
+
 	bwrapArgs = append(bwrapArgs, "--")
 	bwrapArgs = append(bwrapArgs, appExe)
 	bwrapArgs = append(bwrapArgs, os.Args[1:]...)
@@ -178,7 +235,7 @@ func main() {
 		dbus.Stdout = os.Stdout
 		dbus.Stderr = os.Stderr
 
-		dbus.ExtraFiles = []*os.File{w}
+		dbus.ExtraFiles = []*os.File{w, flatpakInfoPatched.File, bwrapInfo}
 
 		if err := dbus.Start(); err != nil {
 			panic(err)
@@ -189,7 +246,10 @@ func main() {
 			panic(err)
 		}
 	}
+
 	// unset O_CLOEXEC
 	syscall.Syscall(syscall.SYS_FCNTL, r.Fd(), syscall.F_SETFD, 0)
+	syscall.Syscall(syscall.SYS_FCNTL, flatpakInfoPatched.Fd(), syscall.F_SETFD, 0)
+
 	syscall.Exec(bwrapExe, append([]string{bwrapExe}, bwrapArgs...), os.Environ())
 }
