@@ -23,7 +23,7 @@ in
     bundlePackage = mkOption {
       description = "Driver package to use when bundling GPU drivers.";
       type = types.package;
-      default = pkgs.mesa.drivers;
+      default = pkgs.mesa;
     };
   };
   config.bubblewrap = mkIf config.gpu.enable rec {
