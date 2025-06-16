@@ -103,6 +103,29 @@ func (m Mkdir) String() string {
 	return m.Dir
 }
 
+type Touch struct {
+	Type string
+	File string
+}
+
+func NewTouch(raw JsonRaw) (m Touch) {
+	m.Type = "touch"
+	m.File = valToString(raw["file"])
+	return
+}
+
+func (m Touch) String() string {
+	file, err := os.OpenFile(m.File, os.O_RDONLY | os.O_CREATE, 0644)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if err := file.Close(); err != nil {
+		fmt.Println(err)
+	}
+	return m.File
+}
+
+
 func envOr(name string, or string) string {
 	val, found := os.LookupEnv(name)
 	if found {
@@ -127,6 +150,8 @@ func valToString(item interface{}) (ret string) {
 			ret = NewInstanceId(raw).String()
 		case "mkdir":
 			ret = NewMkdir(raw).String()
+		case "touch":
+			ret = NewTouch(raw).String()
 		default:
 			panic("Unknown type: \"" + raw["type"].(string) + "\"")
 		}

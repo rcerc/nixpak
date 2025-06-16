@@ -6,6 +6,7 @@ let
     "env"
     "instanceId"
     "mkdir"
+    "touch"
   ];
 in
 {
@@ -69,6 +70,11 @@ in
     mkdir = dir: {
       inherit dir;
       type = "mkdir";
+    };
+
+    touch = file: {
+      inherit file;
+      type = "touch";
     };
 
     homeDir = sloth.env "HOME";

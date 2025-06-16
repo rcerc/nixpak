@@ -150,6 +150,14 @@ including all its parent components (like `mkdir -p`). Returns the resolved slot
 sloth.mkdir (sloth.env "MY_CACHE_DIRECTORY")
 ```
 
+#### `sloth.touch :: Sloth -> Sloth`
+
+Ensures the presence of a file. If it does not exist, creates it with permisions `644`. Returns the resolved sloth value afterwards.
+
+```nix
+sloth.touch (sloth.env "MY_CONFIG_FILE")
+```
+
 #### `sloth.concat :: [Sloth] -> Sloth`
 
 Concatenates sloth values. Useful for combining an environment variable with a string.
