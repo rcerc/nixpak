@@ -41,6 +41,12 @@ in {
       default = [];
     };
 
+    symlinks = mkOption {
+      description = "Symlinks to create within the sandbox.";
+      type = types.listOf (pairOf sloth.type);
+      default = [];
+    };
+
     tmpfs = mkOption {
       description = "Tmpfs locations.";
       type = types.listOf sloth.type;
